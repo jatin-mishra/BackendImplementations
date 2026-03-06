@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org" lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Logs</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background: #1e1e1e;
+            color: #d4d4d4;
+            font-family: 'Menlo', 'Consolas', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.5;
+        }
+        header {
+            position: sticky;
+            top: 0;
+            background: #252526;
+            border-bottom: 1px solid #3c3c3c;
+            padding: 10px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 10;
+        }
+        header h1 { font-size: 15px; font-weight: 600; color: #e0e0e0; }
+        #status {
+            font-size: 12px;
+            padding: 2px 8px;
+            border-radius: 10px;
+            background: #3c3c3c;
+            color: #888;
+        }
+        #status.connected { background: #1a3a2a; color: #4ec9b0; }
+        #status.error     { background: #3a1a1a; color: #f48771; }
+        #log-container {
+            padding: 8px 0;
+            min-height: 100vh;
+        }
+        .log-line {
+            padding: 1px 16px;
+            white-space: pre-wrap;
+            word-break: break-all;
+            border-bottom: 1px solid #2a2a2a;
+        }
+        .log-line:hover { background: #2a2d2e; }
+    </style>
+</head>
+<body>
+
+<header>
+    <h1>Logs</h1>
+    <span id="status">Connecting…</span>
+</header>
+
+<div id="log-container">
+    <div class="log-line" th:each="line : ${lines}" th:text="${line}"></div>
+</div>
+
+<script th:inline="javascript">
+    const MAX_LINES = /*[[${maxLines}]]*/ 100;
+    const container = document.getElementById('log-container');
+    const statusEl  = document.getElementById('status');
+
+    // Auto-scroll flag — stop following if user scrolls up
+    let autoScroll = true;
+    window.addEventListener('scroll', () => {
+        const atBottom = window.innerHeight + window.scrollY >= document.body.scrollHeight - 50;
+        autoScroll = atBottom;
+    });
+
+    function appendLines(rawData) {
+        const lines = rawData.split('\n').filter(l => l.length > 0);
+        const frag  = document.createDocumentFragment();
+        lines.forEach(text => {
+            const div = document.createElement('div');
+            div.className = 'log-line';
+            div.textContent = text;
+            frag.appendChild(div);
+        });
+        container.appendChild(frag);
+
+        // Trim oldest lines when over limit
+        while (container.children.length > MAX_LINES) {
+            container.removeChild(container.firstChild);
+        }
+
+        if (autoScroll) window.scrollTo(0, document.body.scrollHeight);
+    }
+
+    const evtSource = new EventSource('/log/sse');
+
+    evtSource.onopen = () => {
+        statusEl.textContent = 'Connected';
+        statusEl.className = 'connected';
+    };
+
+    evtSource.onmessage = (e) => {
+        appendLines(e.data);
+    };
+
+    evtSource.onerror = () => {
+        statusEl.textContent = 'Disconnected — retrying…';
+        statusEl.className = 'error';
+    };
+</script>
+</body>
+</html>
